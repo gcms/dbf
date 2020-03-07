@@ -28,10 +28,13 @@ public class DbfField {
     private byte setFieldsFlag;                 /* 23    */
     private byte[] reserv4 = new byte[7];       /* 24-30 */
     private byte indexFieldFlag;                /* 31    */
-    private final int fieldIndex;
 
-    private DbfField(int fieldIndex) {
+    private final int fieldIndex;
+    private final int fieldOffset;
+
+    private DbfField(int fieldIndex, int fieldOffset) {
         this.fieldIndex = fieldIndex;
+        this.fieldOffset = fieldOffset;
     }
 
     /**
@@ -40,12 +43,14 @@ public class DbfField {
      * and the stream "pointer" is supposed to be positioned properly.</p>
      *
      * @param in DataInputStream
+     * @param fieldIndex field index
+     * @param offset byte offset from record start
      * @return created DBFField object.
      * @throws DbfException if any stream reading problems occurs.
      */
-    public static DbfField read(DataInput in, int fieldIndex) throws DbfException {
+    public static DbfField read(DataInput in, int fieldIndex, int offset) throws DbfException {
         try {
-            DbfField field = new DbfField(fieldIndex);
+            DbfField field = new DbfField(fieldIndex, offset);
 
             byte firstByte = in.readByte();                     /* 0     */
             if (firstByte == HEADER_TERMINATOR) {
@@ -96,6 +101,10 @@ public class DbfField {
 
     public int getFieldLength() {
         return fieldLength;
+    }
+
+    public int getFieldOffset() {
+        return fieldOffset;
     }
 
     public int getDecimalCount() {

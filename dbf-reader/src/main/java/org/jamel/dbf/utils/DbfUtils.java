@@ -1,6 +1,8 @@
 package org.jamel.dbf.utils;
 
+import java.io.ByteArrayInputStream;
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.IOException;
 
 /**
@@ -19,18 +21,37 @@ public final class DbfUtils {
         return bigEndian;
     }
 
+
+    public static int readLittleEndianInt(byte[] in) throws IOException {
+        DataInput input = new DataInputStream(new ByteArrayInputStream(in));
+        return readLittleEndianInt(input);
+    }
+
     public static short readLittleEndianShort(DataInput in) throws IOException {
         int low = in.readUnsignedByte() & 0xff;
         int high = in.readUnsignedByte();
         return (short) (high << 8 | low);
     }
 
-    public static byte[] trimLeftSpaces(byte[] arr) {
-        int i = arr.length;
-        while (--i >= 0 && arr[i] == ' ') /* EMPTY LOOP */ ;
-        byte[] result = new byte[++i];
-        if (i > 0) System.arraycopy(arr, 0, result, 0, i);
+    public static int calcLenTrimLeftSpaces(byte[] arr, int start, int len) {
+        int end = start + len;
+        while (--end >= start && arr[end] == ' ') /* EMPTY LOOP */ ;
+
+        return end - start + 1;
+    }
+
+    public static byte[] trimLeftSpaces(byte[] arr, int start, int len) {
+        int trimmedLen = calcLenTrimLeftSpaces(arr, start, len);
+
+        byte[] result = new byte[trimmedLen];
+        if (trimmedLen > 0)
+            System.arraycopy(arr, start, result, 0, trimmedLen);
+
         return result;
+    }
+
+    public static byte[] trimLeftSpaces(byte[] arr) {
+        return trimLeftSpaces(arr, 0, arr.length);
     }
 
     public static boolean contains(byte[] arr, byte value) {
@@ -44,7 +65,7 @@ public final class DbfUtils {
     /**
      * parses only positive numbers
      *
-     * @param bytes   bytes of string value
+     * @param bytes bytes of string value
      * @return integer value
      */
     public static int parseInt(byte[] bytes) {
@@ -62,9 +83,9 @@ public final class DbfUtils {
     /**
      * parses only positive numbers
      *
-     * @param bytes   bytes of string value
-     * @param from    index to start from
-     * @param to      index to end at
+     * @param bytes bytes of string value
+     * @param from  index to start from
+     * @param to    index to end at
      * @return integer value
      */
     public static int parseInt(byte[] bytes, int from, int to) {
@@ -79,7 +100,7 @@ public final class DbfUtils {
     /**
      * parses only positive numbers
      *
-     * @param bytes   bytes of string value
+     * @param bytes bytes of string value
      * @return long value
      */
     public static long parseLong(byte[] bytes) {
@@ -97,9 +118,9 @@ public final class DbfUtils {
     /**
      * parses only positive numbers
      *
-     * @param bytes   bytes of string value
-     * @param from    index to start from
-     * @param to      index to end at
+     * @param bytes bytes of string value
+     * @param from  index to start from
+     * @param to    index to end at
      * @return integer value
      */
     public static long parseLong(byte[] bytes, int from, int to) {

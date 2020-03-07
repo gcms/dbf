@@ -28,6 +28,14 @@ public class DbfRow {
         this.row = row;
     }
 
+    public DbfRow(DbfHeader header, Charset defaultCharset, DbfRecord record) {
+        this.header = header;
+        this.defaultCharset = defaultCharset;
+        row = new Object[header.getFieldsCount()];
+        for (int i = 0; i < header.getFieldsCount(); i++)
+            row[i] = record.readFieldValue(header.getField(i));
+    }
+
     /**
      * Retrieves the value of the designated field as java.math.BigDecimal.
      *
@@ -37,6 +45,16 @@ public class DbfRow {
      */
     public BigDecimal getBigDecimal(String fieldName) throws DbfException {
         Object value = get(fieldName);
+        return value == null ? null : new BigDecimal(value.toString());
+    }
+
+    public BigDecimal getBigDecimal(int fieldIndex) {
+        Object value = get(fieldIndex);
+        return value == null ? null : new BigDecimal(value.toString());
+    }
+
+    public BigDecimal getBigDecimal(DbfField field) {
+        Object value = get(field);
         return value == null ? null : new BigDecimal(value.toString());
     }
 
@@ -50,6 +68,23 @@ public class DbfRow {
     public Date getDate(String fieldName) throws DbfException {
         Date value = (Date) get(fieldName);
         return value == null ? null : value;
+    }
+
+    public Date getDate(int fieldIndex) throws DbfException {
+        Date value = (Date) get(fieldIndex);
+        return value == null ? null : value;
+    }
+
+
+    public Date getDate(DbfField field) throws DbfException {
+        Date value = (Date) get(field);
+        return value == null ? null : value;
+    }
+
+    private String getString(Object value, Charset charset) {
+        return value == null
+                ? null
+                : new String(trimLeftSpaces((byte[]) value), charset);
     }
 
     /**
@@ -73,10 +108,24 @@ public class DbfRow {
      * @throws DbfException if there's no field with name fieldName
      */
     public String getString(String fieldName, Charset charset) throws DbfException {
-        Object value = get(fieldName);
-        return value == null
-                ? null
-                : new String(trimLeftSpaces((byte[]) value), charset);
+        return getString(get(fieldName), charset);
+    }
+
+    public String getString(int fieldIndex) throws DbfException {
+        return getString(fieldIndex, defaultCharset);
+    }
+
+    public String getString(int fieldIndex, Charset charset) throws DbfException {
+        return getString(get(fieldIndex), charset);
+    }
+
+    public String getString(DbfField field, Charset charset) throws DbfException {
+        return getString(get(field), charset);
+    }
+
+
+    public String getString(DbfField field) throws DbfException {
+        return getString(field, defaultCharset);
     }
 
     /**
@@ -88,6 +137,16 @@ public class DbfRow {
      */
     public boolean getBoolean(String fieldName) throws DbfException {
         Boolean value = (Boolean) get(fieldName);
+        return value != null && value;
+    }
+
+    public boolean getBoolean(int fieldIndex) throws DbfException {
+        Boolean value = (Boolean) get(fieldIndex);
+        return value != null && value;
+    }
+
+    public boolean getBoolean(DbfField field) throws DbfException {
+        Boolean value = (Boolean) get(field);
         return value != null && value;
     }
 
@@ -174,10 +233,19 @@ public class DbfRow {
     }
 
     private Object get(String fieldName) {
-        int fieldIndex = header.getFieldIndex(fieldName);
-        if (fieldIndex < 0) {
-            throw new DbfException(format("Field \"%s\" does not exist", fieldName));
+        try {
+            int fieldIndex = header.getFieldIndex(fieldName);
+            return get(fieldIndex);
+        } catch (ArrayIndexOutOfBoundsException e) {
+            throw new DbfException(format("Field \"%s\" does not exist", fieldName), e);
         }
+    }
+
+    private Object get(DbfField field) {
+        return get(field.getFieldIndex());
+    }
+
+    private Object get(int fieldIndex) {
         return row[fieldIndex];
     }
 }

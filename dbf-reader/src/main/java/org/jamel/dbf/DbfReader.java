@@ -1,17 +1,12 @@
 package org.jamel.dbf;
 
 import org.jamel.dbf.exception.DbfException;
-import org.jamel.dbf.structure.DbfField;
 import org.jamel.dbf.structure.DbfHeader;
+import org.jamel.dbf.structure.DbfRecord;
 import org.jamel.dbf.structure.DbfRow;
-import org.jamel.dbf.utils.DbfUtils;
 
 import java.io.*;
 import java.nio.charset.Charset;
-import java.util.Date;
-import java.util.GregorianCalendar;
-
-import static java.nio.charset.Charset.defaultCharset;
 
 /**
  * Dbf reader.
@@ -24,39 +19,43 @@ public class DbfReader implements Closeable {
     protected final byte DATA_ENDED = 0x1A;
     protected final byte DATA_DELETED = 0x2A;
 
-    private Charset charset = defaultCharset();
+    private final Charset charset;
 
     private DataInput dataInput;
     private final DbfHeader header;
+    private final DbfRecord record;
 
     public DbfReader(File file) throws DbfException {
+        this(file, Charset.defaultCharset());
+    }
+
+    public DbfReader(File file, Charset charset) throws DbfException {
         try {
             dataInput = new RandomAccessFile(file, "r");
             header = DbfHeader.read(dataInput);
             skipToDataBeginning();
+            this.charset = charset;
+            record = new DbfRecord(header);
         } catch (IOException e) {
             throw new DbfException("Cannot open Dbf file " + file, e);
         }
     }
 
-    public DbfReader(File file, Charset charset) throws DbfException {
-        this(file);
-        this.charset = charset;
+    public DbfReader(InputStream in) throws DbfException {
+        this(in, Charset.defaultCharset());
+
     }
 
-    public DbfReader(InputStream in) throws DbfException {
+    public DbfReader(InputStream in, Charset charset) throws DbfException {
         try {
             dataInput = new DataInputStream(new BufferedInputStream(in));
             header = DbfHeader.read(dataInput);
+            this.charset = charset;
+            record = new DbfRecord(header);
             skipToDataBeginning();
         } catch (IOException e) {
             throw new DbfException("Cannot read Dbf", e);
         }
-    }
-
-    public DbfReader(InputStream in, Charset charset) throws DbfException {
-        this(in);
-        this.charset = charset;
     }
 
     private void skipToDataBeginning() throws IOException {
@@ -105,94 +104,51 @@ public class DbfReader implements Closeable {
                 : new DbfRow(header, charset, record);
     }
 
+
+    public boolean nextRecord(DbfRecord record) {
+        return nextRecordData(record.getData());
+    }
+
     /**
      * Reads and returns the next row in the Dbf stream
      *
      * @return The next row as an Object array.
      */
     public Object[] nextRecord() {
+        if (!nextRecord(record))
+            return null;
+
+        Object recordObjects[] = new Object[header.getFieldsCount()];
+        for (int i = 0; i < header.getFieldsCount(); i++) {
+            recordObjects[i] = record.readFieldValue(header.getField(i));
+        }
+        return recordObjects;
+    }
+
+    public byte[] nextRecordData() {
+        byte[] data = new byte[header.getRecordLength() - 1];
+        return nextRecordData(data) ? data : null;
+    }
+
+    public boolean nextRecordData(byte[] data) {
         try {
             int nextByte;
             do {
                 nextByte = dataInput.readByte();
                 if (nextByte == DATA_ENDED) {
-                    return null;
+                    return false;
                 } else if (nextByte == DATA_DELETED) {
                     dataInput.skipBytes(header.getRecordLength() - 1);
                 }
             } while (nextByte == DATA_DELETED);
 
-            Object recordObjects[] = new Object[header.getFieldsCount()];
-            for (int i = 0; i < header.getFieldsCount(); i++) {
-                recordObjects[i] = readFieldValue(header.getField(i));
-            }
-            return recordObjects;
+
+            dataInput.readFully(data);
+            return true;
         } catch (EOFException e) {
-            return null; // we currently end reading file
+            return false;
         } catch (IOException e) {
             throw new DbfException("Cannot read next record form Dbf file", e);
-        }
-    }
-
-    private Object readFieldValue(DbfField field) throws IOException {
-        byte buf[] = new byte[field.getFieldLength()];
-        dataInput.readFully(buf);
-
-        switch (field.getDataType()) {
-            case CHAR: return readCharacterValue(field, buf);
-            case DATE: return readDateValue(field, buf);
-            case FLOAT: return readFloatValue(field, buf);
-            case LOGICAL: return readLogicalValue(field, buf);
-            case NUMERIC: return readNumericValue(field, buf);
-            case MEMO: return readMemoLink(field, buf);
-            default:  return null;
-        }
-    }
-
-    protected Object readCharacterValue(DbfField field, byte[] buf) throws IOException {
-        return buf;
-    }
-
-    protected Date readDateValue(DbfField field, byte[] buf) throws IOException {
-        int year = DbfUtils.parseInt(buf, 0, 4);
-        int month = DbfUtils.parseInt(buf, 4, 6);
-        int day = DbfUtils.parseInt(buf, 6, 8);
-        return new GregorianCalendar(year, month - 1, day).getTime();
-    }
-
-    protected Float readFloatValue(DbfField field, byte[] buf) throws IOException {
-        try {
-            byte[] floatBuf = DbfUtils.trimLeftSpaces(buf);
-            boolean processable = (floatBuf.length > 0 && !DbfUtils.contains(floatBuf, (byte) '?'));
-            return processable ? Float.valueOf(new String(floatBuf)) : null;
-        } catch (NumberFormatException e) {
-            throw new DbfException("Failed to parse Float from " + field.getName(), e);
-        }
-    }
-
-    protected Boolean readLogicalValue(DbfField field, byte[] buf) throws IOException {
-        boolean isTrue = (buf[0] == 'Y' || buf[0] == 'y' || buf[0] == 'T' || buf[0] == 't');
-        return isTrue ? Boolean.TRUE : Boolean.FALSE;
-    }
-
-    protected Number readNumericValue(DbfField field, byte[] buf) throws IOException {
-        try {
-            byte[] numericBuf = DbfUtils.trimLeftSpaces(buf);
-            boolean processable = numericBuf.length > 0 && !DbfUtils.contains(numericBuf, (byte) '?');
-            return processable ? Double.valueOf(new String(numericBuf)) : null;
-        } catch (NumberFormatException e) {
-            throw new DbfException("Failed to parse Number from " + field.getName(), e);
-        }
-    }
-
-    protected Number readMemoLink(DbfField field, byte[] buf) throws IOException {
-        switch (field.getFieldLength()) {
-            case 4:
-                return DbfUtils.readLittleEndianInt(new DataInputStream(new ByteArrayInputStream(buf)));
-            case 10:
-                return readNumericValue(field, buf);
-            default:
-                throw new DbfException("Unknown MEMO mode: " + field.getFieldLength());
         }
     }
 
